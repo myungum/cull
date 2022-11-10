@@ -7,6 +7,7 @@ __pycache__/
 settings.json
 test.json
 item.json
+test.png
 
 # C extensions
 *.so

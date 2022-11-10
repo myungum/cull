@@ -4,22 +4,31 @@ from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 import time
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 class ItemStatistics:
     def __init__(self) -> None:
         self.win_cnt = 0
         self.lose_cnt = 0
+        self.X = []
+        self.Y = []
 
-    def game_end(self, win):
+    def game_end(self, idx, win):
         if win:
             self.win_cnt += 1
         else:
             self.lose_cnt += 1
+        self.X.append(idx)
+        self.Y.append(self.get_winning_rate())
+
+    def get_winning_rate(self):
+        if (self.win_cnt + self.lose_cnt) == 0:
+            return 0
+        return 100.0 * self.win_cnt / (self.win_cnt + self.lose_cnt)
 
     def __repr__(self) -> str:
-        winning_rate = 100.0 * self.win_cnt / (self.win_cnt + self.lose_cnt)
-        return '{}% ({}승 {}패)'.format(winning_rate, self.win_cnt, self.lose_cnt)
+        return '{}% ({}승 {}패)'.format(self.get_winning_rate(), self.win_cnt, self.lose_cnt)
 
 
 with open('settings.json', 'r') as file:
@@ -28,7 +37,7 @@ with open('settings.json', 'r') as file:
     db = client[info['db_name']]
 
 MATCH_SAVED = True
-MATCH_COUNT = 300
+MATCH_COUNT = 1000
 COUNT_PER_QUERY = 100
 DELAY = 1.5  # client can send 50 requests per minute
 ITEM_ID = 1083  # cull(수확의 낫)
@@ -67,8 +76,9 @@ match_list = list(db['match'].find({}).sort('matchId', -1))[:MATCH_COUNT]
 result = dict()
 result[KEY_PURCHASED] = ItemStatistics()
 result[KEY_NOT_PURCHASED] = ItemStatistics()
-for doc in tqdm(match_list):
-    data = doc['data']
+
+for i in tqdm(range(len(match_list))):
+    data = match_list[i]['data']
 
     # 3-1. find user
     pId = -1
@@ -91,5 +101,8 @@ for doc in tqdm(match_list):
                 winningTeam = event['winningTeam']
     if winningTeam == 100 or winningTeam == 200:
         win = (winningTeam == 100) ^ (pId > 5)
-        result[key].game_end(win)
-print(result)
+        result[key].game_end(i, win)
+
+plt.plot(result[KEY_PURCHASED].X, result[KEY_PURCHASED].Y, '-')
+plt.plot(result[KEY_NOT_PURCHASED].X, result[KEY_NOT_PURCHASED].Y, '--')
+plt.savefig('test.png')
