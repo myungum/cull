@@ -61,38 +61,48 @@ if not MATCH_SAVED:
         except DuplicateKeyError as e:
             pass
 
-# 2. get timeline
-GET_TIMELINE_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/{}/timeline'
-for doc in tqdm(list(db['match'].find({'data': None}))):
+# 2. get game data
+GET_GAME_DATA_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/{}'
+for doc in tqdm(list(db['match'].find({'game_data': None}))):
     matchId = doc['matchId']
-    data = requests.get(url=GET_TIMELINE_API.format(
+    timeline = requests.get(url=GET_GAME_DATA_API.format(
         matchId), headers=info['header']).json()
-    db['match'].update_one({'_id': doc['_id']}, {'$set': {'data': data}})
+    db['match'].update_one({'_id': doc['_id']}, {'$set': {'game_data': timeline}})
     time.sleep(1.5)
     print(doc['_id'])
 
-# 3. analyze timeline
+# 3. get timeline
+GET_TIMELINE_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/{}/timeline'
+for doc in tqdm(list(db['match'].find({'timeline': None}))):
+    matchId = doc['matchId']
+    timeline = requests.get(url=GET_TIMELINE_API.format(
+        matchId), headers=info['header']).json()
+    db['match'].update_one({'_id': doc['_id']}, {'$set': {'timeline': timeline}})
+    time.sleep(1.5)
+    print(doc['_id'])
+
+# 4. analyze timeline
 match_list = list(db['match'].find({}).sort('matchId', -1))[:MATCH_COUNT]
 result = dict()
 result[KEY_PURCHASED] = ItemStatistics()
 result[KEY_NOT_PURCHASED] = ItemStatistics()
 
 for i in tqdm(range(len(match_list))):
-    data = match_list[i]['data']
+    timeline = match_list[i]['timeline']
 
-    # 3-1. find user
+    # 4-1. find user
     pId = -1
-    for participant in data['info']['participants']:
+    for participant in timeline['info']['participants']:
         if participant['puuid'] == info['puuid']:
             pId = participant['participantId']
             break
     if pId == -1:
         raise Exception('participantId not found')
 
-    # 3-2. trace item
+    # 4-2. trace item
     key = KEY_NOT_PURCHASED
     winningTeam = -1
-    for frame in data['info']['frames']:
+    for frame in timeline['info']['frames']:
         for event in frame['events']:
             if event['type'] == 'ITEM_PURCHASED':
                 if event['itemId'] == ITEM_ID and event['participantId'] == pId:
