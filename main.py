@@ -5,6 +5,7 @@ from pymongo.errors import DuplicateKeyError
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 
 class ItemStatistics:
@@ -14,12 +15,12 @@ class ItemStatistics:
         self.X = []
         self.Y = []
 
-    def game_end(self, idx, win):
+    def game_end(self, time, win):
         if win:
             self.win_cnt += 1
         else:
             self.lose_cnt += 1
-        self.X.append(idx)
+        self.X.append(time)
         self.Y.append(self.get_winning_rate())
 
     def get_winning_rate(self):
@@ -47,26 +48,26 @@ KEY_NOT_PURCHASED = '수확의 낫을 사지 않은 경우'
 # 1. get match
 if not MATCH_SAVED:
     GET_MATCH_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/{}/ids?start={}&count={}'
-    matchIdSet = set()
+    match_id_set = set()
     docs = []
     for i in range(int(MATCH_COUNT / COUNT_PER_QUERY)):
         data = requests.get(url=GET_MATCH_API.format(
             info['puuid'], COUNT_PER_QUERY * i, COUNT_PER_QUERY), headers=info['header']).json()
-        for matchId in data:
-            matchIdSet.add(matchId)
+        for match_id in data:
+            match_id_set.add(match_id)
         time.sleep(1.5)
-    for matchId in matchIdSet:
+    for match_id in match_id_set:
         try:
-            db['match'].insert_one({'matchId': matchId})
+            db['match'].insert_one({'matchId': match_id})
         except DuplicateKeyError as e:
             pass
 
 # 2. get game data
 GET_GAME_DATA_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/{}'
 for doc in tqdm(list(db['match'].find({'game_data': None}))):
-    matchId = doc['matchId']
+    match_id = doc['matchId']
     timeline = requests.get(url=GET_GAME_DATA_API.format(
-        matchId), headers=info['header']).json()
+        match_id), headers=info['header']).json()
     db['match'].update_one({'_id': doc['_id']}, {'$set': {'game_data': timeline}})
     time.sleep(1.5)
     print(doc['_id'])
@@ -74,21 +75,24 @@ for doc in tqdm(list(db['match'].find({'game_data': None}))):
 # 3. get timeline
 GET_TIMELINE_API = 'https://asia.api.riotgames.com/lol/match/v5/matches/{}/timeline'
 for doc in tqdm(list(db['match'].find({'timeline': None}))):
-    matchId = doc['matchId']
+    match_id = doc['matchId']
     timeline = requests.get(url=GET_TIMELINE_API.format(
-        matchId), headers=info['header']).json()
+        match_id), headers=info['header']).json()
     db['match'].update_one({'_id': doc['_id']}, {'$set': {'timeline': timeline}})
     time.sleep(1.5)
     print(doc['_id'])
 
 # 4. analyze timeline
-match_list = list(db['match'].find({}).sort('matchId', -1))[:MATCH_COUNT]
+match_list = list(db['match'].find({}).sort('matchId', 1))[:MATCH_COUNT]
 result = dict()
 result[KEY_PURCHASED] = ItemStatistics()
 result[KEY_NOT_PURCHASED] = ItemStatistics()
 
 for i in tqdm(range(len(match_list))):
     timeline = match_list[i]['timeline']
+    game_data = match_list[i]['game_data']
+    game_start_timestamp = game_data['info']['gameStartTimestamp']
+    game_start_datetime = datetime.fromtimestamp(game_start_timestamp / 1000)
 
     # 4-1. find user
     pId = -1
@@ -101,17 +105,17 @@ for i in tqdm(range(len(match_list))):
 
     # 4-2. trace item
     key = KEY_NOT_PURCHASED
-    winningTeam = -1
+    winning_team = -1
     for frame in timeline['info']['frames']:
         for event in frame['events']:
             if event['type'] == 'ITEM_PURCHASED':
                 if event['itemId'] == ITEM_ID and event['participantId'] == pId:
                     key = KEY_PURCHASED
             elif event['type'] == 'GAME_END':
-                winningTeam = event['winningTeam']
-    if winningTeam == 100 or winningTeam == 200:
-        win = (winningTeam == 100) ^ (pId > 5)
-        result[key].game_end(i, win)
+                winning_team = event['winningTeam']
+    if winning_team == 100 or winning_team == 200:
+        win = (winning_team == 100) ^ (pId > 5)
+        result[key].game_end(game_start_datetime, win)
 
 plt.plot(result[KEY_PURCHASED].X, result[KEY_PURCHASED].Y, '-')
 plt.plot(result[KEY_NOT_PURCHASED].X, result[KEY_NOT_PURCHASED].Y, '--')
