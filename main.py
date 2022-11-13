@@ -41,6 +41,7 @@ MATCH_SAVED = True
 MATCH_COUNT = 1000
 COUNT_PER_QUERY = 100
 DELAY = 1.5  # client can send 50 requests per minute
+MAX_REMAKE_GAME_DURATION = 300
 ITEM_ID = 1083  # cull(수확의 낫)
 KEY_PURCHASED = '수확의 낫을 산 경우'
 KEY_NOT_PURCHASED = '수확의 낫을 사지 않은 경우'
@@ -55,7 +56,7 @@ if not MATCH_SAVED:
             info['puuid'], COUNT_PER_QUERY * i, COUNT_PER_QUERY), headers=info['header']).json()
         for match_id in data:
             match_id_set.add(match_id)
-        time.sleep(1.5)
+        time.sleep(DELAY)
     for match_id in match_id_set:
         try:
             db['match'].insert_one({'matchId': match_id})
@@ -69,7 +70,7 @@ for doc in tqdm(list(db['match'].find({'game_data': None}))):
     timeline = requests.get(url=GET_GAME_DATA_API.format(
         match_id), headers=info['header']).json()
     db['match'].update_one({'_id': doc['_id']}, {'$set': {'game_data': timeline}})
-    time.sleep(1.5)
+    time.sleep(DELAY)
     print(doc['_id'])
 
 # 3. get timeline
@@ -79,7 +80,7 @@ for doc in tqdm(list(db['match'].find({'timeline': None}))):
     timeline = requests.get(url=GET_TIMELINE_API.format(
         match_id), headers=info['header']).json()
     db['match'].update_one({'_id': doc['_id']}, {'$set': {'timeline': timeline}})
-    time.sleep(1.5)
+    time.sleep(DELAY)
     print(doc['_id'])
 
 # 4. analyze timeline
@@ -91,6 +92,10 @@ result[KEY_NOT_PURCHASED] = ItemStatistics()
 for i in tqdm(range(len(match_list))):
     timeline = match_list[i]['timeline']
     game_data = match_list[i]['game_data']
+
+    # 다시하기(remake)
+    if game_data['info']['gameDuration'] < MAX_REMAKE_GAME_DURATION:
+        continue
     game_start_timestamp = game_data['info']['gameStartTimestamp']
     game_start_datetime = datetime.fromtimestamp(game_start_timestamp / 1000)
 
