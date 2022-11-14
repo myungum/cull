@@ -10,26 +10,33 @@ from datetime import datetime
 
 class ItemStatistics:
     def __init__(self) -> None:
-        self.win_cnt = 0
-        self.lose_cnt = 0
-        self.X = []
-        self.Y = []
+        self.win_list = []
 
-    def game_end(self, time, win):
-        if win:
-            self.win_cnt += 1
-        else:
-            self.lose_cnt += 1
-        self.X.append(time)
-        self.Y.append(self.get_winning_rate())
+    def append_game_result(self, time, win):
+        self.win_list.append((time, win))
 
-    def get_winning_rate(self):
-        if (self.win_cnt + self.lose_cnt) == 0:
-            return 0
-        return 100.0 * self.win_cnt / (self.win_cnt + self.lose_cnt)
+    def get_winning_rates(self):
+        X = []
+        Y = []
+        m_dic = dict()
+        for time, win in self.win_list:
+            time: datetime
+            win: bool
+            
+            m = time.date().replace(day=1)
+            if m not in m_dic:
+                m_dic[m] = [0, 0]
 
-    def __repr__(self) -> str:
-        return '{}% ({}승 {}패)'.format(self.get_winning_rate(), self.win_cnt, self.lose_cnt)
+            if win:
+                m_dic[m][0] += 1
+            else:
+                m_dic[m][1] += 1
+        for m, win_lose_cnt in m_dic.items():
+            winning_rate = 100.0 * win_lose_cnt[0] / (win_lose_cnt[0] + win_lose_cnt[1])
+            X.append(m)
+            Y.append(winning_rate)
+
+        return X, Y
 
 
 with open('settings.json', 'r') as file:
@@ -120,8 +127,10 @@ for i in tqdm(range(len(match_list))):
                 winning_team = event['winningTeam']
     if winning_team == 100 or winning_team == 200:
         win = (winning_team == 100) ^ (pId > 5)
-        result[key].game_end(game_start_datetime, win)
+        result[key].append_game_result(game_start_datetime, win)
 
-plt.plot(result[KEY_PURCHASED].X, result[KEY_PURCHASED].Y, '-')
-plt.plot(result[KEY_NOT_PURCHASED].X, result[KEY_NOT_PURCHASED].Y, '--')
+X, Y = result[KEY_PURCHASED].get_winning_rates()
+plt.plot(X, Y, '-')
+X, Y = result[KEY_NOT_PURCHASED].get_winning_rates()
+plt.plot(X, Y, '--')
 plt.savefig('test.png')
