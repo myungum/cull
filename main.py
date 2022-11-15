@@ -103,6 +103,9 @@ for i in tqdm(range(len(match_list))):
     # 다시하기(remake)
     if game_data['info']['gameDuration'] < MAX_REMAKE_GAME_DURATION:
         continue
+    # 협곡 외 게임(except classic)
+    if 'CLASSIC' != game_data['info']['gameMode']:
+        continue
     game_start_timestamp = game_data['info']['gameStartTimestamp']
     game_start_datetime = datetime.fromtimestamp(game_start_timestamp / 1000)
 
