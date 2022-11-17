@@ -39,6 +39,13 @@ class ItemStatistics:
         return X, Y
 
 
+def get_team(participantId):
+    if participantId <= 5:
+        return RED_TEAM
+    else:
+        return BLUE_TEAM
+
+
 with open('settings.json', 'r') as file:
     info = dict(json.load(file))
     client = MongoClient(host=info['db_host'], port=info['db_port'])
@@ -52,6 +59,9 @@ MAX_REMAKE_GAME_DURATION = 300
 ITEM_ID = 1083  # cull(수확의 낫)
 KEY_PURCHASED = '수확의 낫을 산 경우'
 KEY_NOT_PURCHASED = '수확의 낫을 사지 않은 경우'
+UNDEFINED_TEAM = -1
+RED_TEAM = 100
+BLUE_TEAM = 200
 
 # 1. get match
 if not MATCH_SAVED:
@@ -120,7 +130,7 @@ for i in tqdm(range(len(match_list))):
 
     # 4-2. trace item
     key = KEY_NOT_PURCHASED
-    winning_team = -1
+    winning_team = UNDEFINED_TEAM
     for frame in timeline['info']['frames']:
         for event in frame['events']:
             if event['type'] == 'ITEM_PURCHASED':
@@ -128,8 +138,8 @@ for i in tqdm(range(len(match_list))):
                     key = KEY_PURCHASED
             elif event['type'] == 'GAME_END':
                 winning_team = event['winningTeam']
-    if winning_team == 100 or winning_team == 200:
-        win = (winning_team == 100) ^ (pId > 5)
+    if winning_team == RED_TEAM or winning_team == BLUE_TEAM:
+        win = winning_team == get_team(pId)
         result[key].append_game_result(game_start_datetime, win)
 
 X, Y = result[KEY_PURCHASED].get_winning_rates()
